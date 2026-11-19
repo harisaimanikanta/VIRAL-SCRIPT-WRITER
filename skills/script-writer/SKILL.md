@@ -28,6 +28,7 @@ Defaults (don't ask): True Mechanism Parable format, ~60 s, English, 9:16, styli
 2. `references/scriptwriting-framework.md` - beat sheet, voice rules, hook types, QC rubric.
 3. `references/viral-storytelling-playbook.md` - observed patterns from research rounds 1–2.
 4. `research/research-log.md` and `research/scripts/` - reuse earlier research; don't redo it.
+Production references (how top 3D explainers are built, incl. a 157.8M-view Short): `references/production-references.md`.
 Worked examples: `research/scripts/zhang-heng-seismoscope/script.md` (parable format) and `research/scripts/eiffel-tower-lustig/script.md` (documentary format).
 
 ## 2. Historical research (mandatory)
