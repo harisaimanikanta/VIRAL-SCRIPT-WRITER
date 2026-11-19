@@ -89,19 +89,38 @@ export async function useHDRI(renderer, scene, name, { intensity = 1, background
   scene.environment = env; scene.environmentIntensity = intensity; scene.environmentRotation = new THREE.Euler(0, rotation, 0);
   if (background) { scene.background = tex; scene.backgroundBlurriness = blur; scene.backgroundRotation = new THREE.Euler(0, rotation, 0); }
 }
+// Final grade: zoom blur (transitions) → chromatic fringe → saturation/contrast → split-tone → colour fill (portal transitions) → vignette → grain
 const GrainVignette = {
-  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0.045 }, uVig: { value: 0.35 }, uWarm: { value: 0.03 } },
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0.045 }, uVig: { value: 0.35 }, uWarm: { value: 0.03 },
+    uSat: { value: 1.22 }, uCon: { value: 1.08 }, uZoom: { value: 0 }, uCenter: { value: new THREE.Vector2(0.5, 0.5) },
+    uFill: { value: 0 }, uFillColor: { value: new THREE.Color('#ffffff') }, uCA: { value: 0.0015 },
+    uShadow: { value: new THREE.Color('#1d4a5a') }, uHigh: { value: new THREE.Color('#ffb070') }, uSplit: { value: 0.12 } },
   vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
-  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uGrain, uVig, uWarm; varying vec2 vUv;
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uGrain, uVig, uWarm, uSat, uCon, uZoom, uFill, uCA, uSplit; uniform vec2 uCenter;
+    uniform vec3 uFillColor, uShadow, uHigh; varying vec2 vUv;
     float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime*7.) * 43758.5453); }
-    void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - .5; float v = 1. - uVig * dot(d, d) * 2.2;
-      c.rgb *= v; c.rgb += (h(vUv*1000.) - .5) * uGrain; c.r += uWarm*.5; c.b -= uWarm*.5; gl_FragColor = c; }`,
+    vec3 samp(vec2 uv){ vec2 d = uv - .5; float ca = uCA * (1. + 6.*uZoom);
+      return vec3(texture2D(tDiffuse, uv - d*ca).r, texture2D(tDiffuse, uv).g, texture2D(tDiffuse, uv + d*ca).b); }
+    void main(){
+      vec3 c = vec3(0.);
+      if (uZoom > 0.001) { vec2 dir = vUv - uCenter; for (int i = 0; i < 10; i++) { float k = float(i) / 9.; c += samp(vUv - dir * k * uZoom * 0.18); } c /= 10.; }
+      else c = samp(vUv);
+      float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+      c = mix(vec3(l), c, uSat);
+      c = (c - .5) * uCon + .5;
+      c += uSplit * (mix(uShadow, vec3(0.), smoothstep(0., .5, l)) - .5*0.) * (1. - l) * 0.5;
+      c += uSplit * uHigh * smoothstep(.55, 1., l) * 0.35;
+      c.r += uWarm*.5; c.b -= uWarm*.5;
+      c = mix(c, uFillColor, clamp(uFill, 0., 1.));
+      vec2 d = vUv - .5; c *= 1. - uVig * dot(d, d) * 2.2;
+      c += (h(vUv*1000.) - .5) * uGrain;
+      gl_FragColor = vec4(c, 1.); }`,
 };
 /**
  * Cinematic post chain: GTAO contact shadows → bloom → optional depth of field → output (tone map) → grain + vignette.
  * Returns {render(scene, camera, t, {focus, aperture})}. Call instead of renderer.render.
  */
-export function makePost(renderer, width, height, { ao = true, bloom = 0.25, dof = true, grain = 0.04, vignette = 0.35 } = {}) {
+export function makePost(renderer, width, height, { ao = true, bloom = 0.25, dof = true, grain = 0.04, vignette = 0.35, threshold = 0.78 } = {}) {
   const composer = new EffectComposer(renderer); composer.setSize(width, height);
   const dummyS = new THREE.Scene(), dummyC = new THREE.PerspectiveCamera();
   const rp = new RenderPass(dummyS, dummyC); composer.addPass(rp);
@@ -110,13 +129,18 @@ export function makePost(renderer, width, height, { ao = true, bloom = 0.25, dof
   composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } },
     vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
     fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (any(isnan(c)) || any(isinf(c))) c = vec4(0.,0.,0.,1.); gl_FragColor = min(c, vec4(32.)); }' }));
-  if (bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), bloom, 0.5, 0.88));
+  let bloomPass = null; if (bloom) { bloomPass = new UnrealBloomPass(new THREE.Vector2(width, height), bloom, 0.55, threshold); composer.addPass(bloomPass); }
   let bokeh = null; if (dof) { bokeh = new BokehPass(dummyS, dummyC, { focus: 3, aperture: 0.0, maxblur: 0.008 }); composer.addPass(bokeh); }
   composer.addPass(new OutputPass());
   const gv = new ShaderPass(GrainVignette); gv.uniforms.uGrain.value = grain; gv.uniforms.uVig.value = vignette; composer.addPass(gv);
   return {
     composer,
-    render(scene, camera, t = 0, { focus = null, aperture = 0 } = {}) {
+    grade: gv.uniforms,
+    /** fx: {focus, aperture, bloom, zoom (0..1 radial blur), fill (0..1), fillColor, sat, con, warm, split} */
+    render(scene, camera, t = 0, { focus = null, aperture = 0, bloom: bl = null, zoom = 0, fill = 0, fillColor = null, sat = null, con = null, warm = null, exposure = null } = {}) {
+      const u = gv.uniforms; u.uZoom.value = zoom; u.uFill.value = fill; if (fillColor) u.uFillColor.value.set(fillColor);
+      if (sat != null) u.uSat.value = sat; if (con != null) u.uCon.value = con; if (warm != null) u.uWarm.value = warm;
+      if (bloomPass && bl != null) bloomPass.strength = bl; if (exposure != null) renderer.toneMappingExposure = exposure;
       rp.scene = scene; rp.camera = camera;
       if (gtao) { gtao.scene = scene; gtao.camera = camera; }
       if (bokeh) { bokeh.scene = scene; bokeh.camera = camera; bokeh.enabled = aperture > 0 && focus != null;

@@ -74,7 +74,20 @@ const fps = flags.preview ? 15 : +(flags.fps || (await page.evaluate(() => windo
 const shot = async t => { await page.evaluate(t => window.renderFrame(t), t); return page.screenshot({ type: 'jpeg', quality: 92 }); };
 
 fs.mkdirSync(path.join(process.cwd(), 'out'), { recursive: true });
-if (stills.length) {
+if (flags.qa) {
+  // QA: sample every --qa seconds; flag flat/blank/black/blown frames (ignores intended portal fills via --qa-ignore "c:w,c:w")
+  const step = +flags.qa, ign = (flags['qa-ignore'] || '').split(',').filter(Boolean).map(s => s.split(':').map(Number));
+  const bad = [];
+  for (let t = 0; t < sceneDur; t += step) {
+    const st = await page.evaluate(async t => { await window.renderFrame(t); const c = document.getElementById('c'); const o = document.createElement('canvas'); o.width = 96; o.height = 170;
+      const g = o.getContext('2d'); g.drawImage(c, 0, 0, 96, 170); const d = g.getImageData(0, 0, 96, 170).data; let s = 0, s2 = 0, n = 0;
+      for (let i = 0; i < d.length; i += 4) { const l = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2]; s += l; s2 += l * l; n++; } const m = s / n; return { m, sd: Math.sqrt(Math.max(0, s2 / n - m * m)) }; }, t);
+    const ignored = ign.some(([c, w]) => Math.abs(t - c) < w);
+    const flag = st.sd < 9 ? 'FLAT' : st.m < 12 ? 'BLACK' : st.m > 245 ? 'BLOWN' : '';
+    if (flag && !ignored) bad.push(`${t.toFixed(2)}s ${flag} mean=${st.m.toFixed(0)} sd=${st.sd.toFixed(1)}`);
+  }
+  console.log(bad.length ? 'QA ISSUES:\n' + bad.join('\n') : 'QA OK: no blank/flat/black/blown frames');
+} else if (stills.length) {
   for (const t of stills) {
     const f = path.resolve(outArg && stills.length === 1 ? outArg : path.join('out', `${base}-${t}s.jpg`));
     fs.writeFileSync(f, await shot(t)); console.log('wrote', f);
