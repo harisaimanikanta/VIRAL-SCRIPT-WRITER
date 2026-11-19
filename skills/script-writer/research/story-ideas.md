@@ -101,3 +101,8 @@ Scored with the 5-point fit test. Evidence was checked through search summaries;
 - Cold open: "He printed fake government letters and invited six scrap dealers to buy the Eiffel Tower."
 - Use the existing research (`scripts/eiffel-tower-lustig/`). The reversal is the source twist; the doubt beat is the dealer who went to the police.
 - Fit 7/10 · Competition: high (9+ Shorts)
+
+## From idea-creator
+| # | Story | Status |
+|---|---|---|
+| 41 | The Doctor Who Drank the Cure (Barry Marshall, 1984) | scripted (`scripts/barry-marshall-h-pylori/`) |
