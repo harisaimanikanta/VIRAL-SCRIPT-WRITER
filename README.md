@@ -39,5 +39,12 @@ Run `/script-writer:script-writer` and paste an IDEA CARD or a story name.
 | `research/story-ideas.md` | 30 + 10 story pitches |
 | `scripts/` | `storyboard.py` (frame-by-frame), `yt_research.py` + `analyze_round.py` (competitor research), `script_stats.py`, `validate_skill.py`, `setup.sh` |
 
+## Second skill: shorts-renderer (script → MP4)
+Turns a script into a vertical 1080×1920 video: stylised 3D characters, camera moves, growing lines and vessel networks, maps and a globe (real geographic data), captions and your voiceover. It writes a Three.js scene with the bundled kit and renders it frame by frame (headless Chromium + ffmpeg, CPU is fine).
+- `/script-writer:shorts-renderer <slug> --audio voice.mp3`
+- Worked example: `skills/shorts-renderer/examples/blood-vessels/scene.js` (a 39 s scale-ladder explainer)
+- Setup: `bash skills/shorts-renderer/scripts/setup.sh`
+- Limits: stylised characters, not photoreal humans (see `skills/shorts-renderer/references/kit-api.md`).
+
 ## Setup (optional)
 Video analysis and competitor research need `yt-dlp` (and ideally Node.js) and YouTube network access: `bash skills/script-writer/scripts/setup.sh`. Writing scripts needs only web search.
