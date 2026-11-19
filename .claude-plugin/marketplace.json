@@ -1,0 +1,14 @@
+{
+  "name": "script-writer",
+  "owner": {
+    "name": "harisaimanikanta"
+  },
+  "plugins": [
+    {
+      "name": "script-writer",
+      "source": "./",
+      "description": "Writes fact-checked Historical WTF YouTube Shorts scripts in a viral True Mechanism Parable style, with hooks, storyboard, editing and publishing package. Includes research data, reference-video analysis and frame-by-frame tools."
+    }
+  ],
+  "description": "Writes fact-checked Historical WTF YouTube Shorts scripts in a viral True Mechanism Parable style, with hooks, storyboard, editing and publishing package. Includes research data, reference-video analysis and frame-by-frame tools."
+}

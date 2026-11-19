@@ -1,0 +1,8 @@
+{
+  "name": "script-writer",
+  "version": "1.0.0",
+  "description": "Writes fact-checked Historical WTF YouTube Shorts scripts in a viral True Mechanism Parable style, with hooks, storyboard, editing and publishing package. Includes research data, reference-video analysis and frame-by-frame tools.",
+  "author": { "name": "harisaimanikanta" },
+  "repository": "https://github.com/harisaimanikanta/VIRAL-SCRIPT-WRITER",
+  "keywords": ["youtube", "shorts", "history", "script", "storyboard"]
+}
