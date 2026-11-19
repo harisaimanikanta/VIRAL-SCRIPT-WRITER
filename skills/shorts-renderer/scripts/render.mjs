@@ -51,6 +51,9 @@ const server = http.createServer((req, res) => {
   if (!file) { res.writeHead(404); return res.end(); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404); return res.end(); }
+    // on-the-fly compatibility patches for third-party modules (files on disk are not modified)
+    if (file.endsWith(path.join('mannequin-js', 'src', 'bodies', 'Mannequin.js'))) data = Buffer.from(String(data).replace('scene.add( this );', 'scene?.add( this );'));
+    if (file.endsWith(path.join('mannequin-js', 'src', 'scene.js'))) data = Buffer.from(String(data).replace(/document\.head\.appendChild\( link \);/, '').replace(/document\.head\.appendChild\( meta \);/, '').replace('var stage = initStage( );', 'var stage = {};'));
     res.writeHead(200, { 'content-type': types[path.extname(file)] || 'application/octet-stream' });
     res.end(data);
   });

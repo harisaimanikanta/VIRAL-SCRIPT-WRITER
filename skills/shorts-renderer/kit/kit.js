@@ -65,6 +65,68 @@ export function studio(scene, { sky = '#76c4f0', ground = '#4f9a3c', groundSize 
   return { hemi, sun, ground: g };
 }
 
+// ---------- realism: HDRI lighting + post-processing ----------
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { BokehPass } from 'three/addons/postprocessing/BokehPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+const _hdriCache = {};
+/** Real-world HDRI lighting from @pmndrs/assets (CC0): apartment bridge city dawn esplanade forest hall lab lobby night park sky studio sunrise sunset venice warehouse workshop. */
+export async function loadHDRI(renderer, name) {
+  if (_hdriCache[name]) return _hdriCache[name];
+  const url = (await import(`/node_modules/@pmndrs/assets/hdri/${name}.exr.js`)).default;
+  const tex = await new EXRLoader().loadAsync(url); tex.mapping = THREE.EquirectangularReflectionMapping;
+  const pm = new THREE.PMREMGenerator(renderer); const env = pm.fromEquirectangular(tex).texture; pm.dispose();
+  return (_hdriCache[name] = { env, tex });
+}
+/** Apply an HDRI to a scene: env lighting (+ optional blurred background). */
+export async function useHDRI(renderer, scene, name, { intensity = 1, background = false, blur = 0.6, rotation = 0 } = {}) {
+  const { env, tex } = await loadHDRI(renderer, name);
+  scene.environment = env; scene.environmentIntensity = intensity; scene.environmentRotation = new THREE.Euler(0, rotation, 0);
+  if (background) { scene.background = tex; scene.backgroundBlurriness = blur; scene.backgroundRotation = new THREE.Euler(0, rotation, 0); }
+}
+const GrainVignette = {
+  uniforms: { tDiffuse: { value: null }, uTime: { value: 0 }, uGrain: { value: 0.045 }, uVig: { value: 0.35 }, uWarm: { value: 0.03 } },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+  fragmentShader: `uniform sampler2D tDiffuse; uniform float uTime, uGrain, uVig, uWarm; varying vec2 vUv;
+    float h(vec2 p){ return fract(sin(dot(p, vec2(12.9898,78.233)) + uTime*7.) * 43758.5453); }
+    void main(){ vec4 c = texture2D(tDiffuse, vUv); vec2 d = vUv - .5; float v = 1. - uVig * dot(d, d) * 2.2;
+      c.rgb *= v; c.rgb += (h(vUv*1000.) - .5) * uGrain; c.r += uWarm*.5; c.b -= uWarm*.5; gl_FragColor = c; }`,
+};
+/**
+ * Cinematic post chain: GTAO contact shadows → bloom → optional depth of field → output (tone map) → grain + vignette.
+ * Returns {render(scene, camera, t, {focus, aperture})}. Call instead of renderer.render.
+ */
+export function makePost(renderer, width, height, { ao = true, bloom = 0.25, dof = true, grain = 0.04, vignette = 0.35 } = {}) {
+  const composer = new EffectComposer(renderer); composer.setSize(width, height);
+  const dummyS = new THREE.Scene(), dummyC = new THREE.PerspectiveCamera();
+  const rp = new RenderPass(dummyS, dummyC); composer.addPass(rp);
+  let gtao = null; if (ao) { gtao = new GTAOPass(dummyS, dummyC, width, height); gtao.blendIntensity = 0.85; composer.addPass(gtao); }
+  // sanitize: NaN/Inf from any material (e.g. sheen + HDRI edge cases) would be smeared into black blocks by bloom
+  composer.addPass(new ShaderPass({ uniforms: { tDiffuse: { value: null } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.); }',
+    fragmentShader: 'uniform sampler2D tDiffuse; varying vec2 vUv; void main(){ vec4 c = texture2D(tDiffuse, vUv); if (any(isnan(c)) || any(isinf(c))) c = vec4(0.,0.,0.,1.); gl_FragColor = min(c, vec4(32.)); }' }));
+  if (bloom) composer.addPass(new UnrealBloomPass(new THREE.Vector2(width, height), bloom, 0.5, 0.88));
+  let bokeh = null; if (dof) { bokeh = new BokehPass(dummyS, dummyC, { focus: 3, aperture: 0.0, maxblur: 0.008 }); composer.addPass(bokeh); }
+  composer.addPass(new OutputPass());
+  const gv = new ShaderPass(GrainVignette); gv.uniforms.uGrain.value = grain; gv.uniforms.uVig.value = vignette; composer.addPass(gv);
+  return {
+    composer,
+    render(scene, camera, t = 0, { focus = null, aperture = 0 } = {}) {
+      rp.scene = scene; rp.camera = camera;
+      if (gtao) { gtao.scene = scene; gtao.camera = camera; }
+      if (bokeh) { bokeh.scene = scene; bokeh.camera = camera; bokeh.enabled = aperture > 0 && focus != null;
+        if (bokeh.enabled) { const u = bokeh.uniforms; u.focus.value = focus; u.aperture.value = aperture; u.nearClip.value = camera.near; u.farClip.value = camera.far; u.aspect.value = camera.aspect; } }
+      gv.uniforms.uTime.value = t;
+      composer.render();
+    },
+  };
+}
+
 // ---------- character ----------
 const capsule = (r, len, mat) => { const m = new THREE.Mesh(new THREE.CapsuleGeometry(r, len, 6, 16), mat); m.castShadow = true; return m; };
 /**

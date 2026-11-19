@@ -36,3 +36,15 @@ export async function setup({ THREE, canvas, width, height }) { …; return { re
 - Characters are stylised primitives, not photoreal humans. For realistic humans use Blender (+ a Blender MCP server) or a game engine on the user's machine, or AI video generators per shot.
 - External 3D models (.glb) work if the user supplies them (put them next to the scene; load with `GLTFLoader` from `three/addons/loaders/GLTFLoader.js`, URL `/scene/<file>.glb`).
 - Rendering runs on the CPU in cloud sessions: keep geometry moderate (< ~1M triangles visible) and use `--preview` while iterating.
+
+## Realism layer (v2)
+| Function | What |
+|---|---|
+| `useHDRI(renderer, scene, name, {intensity, background, blur, rotation})` | Real-world image-based lighting + reflections from `@pmndrs/assets` (CC0): apartment, bridge, city, dawn, esplanade, forest, hall, lab, lobby, night, park, sky, studio, sunrise, sunset, venice, warehouse, workshop |
+| `makePost(renderer, w, h, {ao, bloom, dof, grain, vignette})` → `.render(scene, camera, t, {focus, aperture})` | GTAO contact shadows → NaN-sanitize → bloom → depth of field → tone mapping → film grain + vignette. Use instead of `renderer.render`. Typical close-up: `aperture 0.003–0.006`, `focus` = distance to subject |
+| `import { makeHuman } from '/kit/human.js'` | Realistic-proportion human (mannequin-js body, GPL-3.0 npm dep) with skin/fabric/leather physical materials, eyes, brows, nose, ears, mouth, hair (`short`/`side`/`bald`/`none`), glasses, moustache, lab coat, tie. Pose in degrees via `h.m.<joint>.<prop>`: `l_arm.raise/straddle/turn`, `l_elbow.bend`, `l_wrist.bend`, `l_fingers.bend`, `torso.bend/turn/tilt`, `head.nod/turn/tilt`, `l_leg.raise/straddle`, `l_knee.bend`. `h.rest()`, `h.idle(t)`, `h.face('neutral'|'o'|'frown'|'smile')`, `h.setOpacity(a)`. Hand position: `h.m.r_wrist.localToWorld(new THREE.Vector3())` |
+
+Gotchas learned the hard way:
+- Never parent the camera to a scene (stale camera matrices in other scenes). Put overlays such as eyepiece masks in world space, in front of the camera.
+- mannequin-js overrides `attach()`: use `THREE.Object3D.prototype.attach.call(joint, mesh)`. The render server patches its demo stage out on the fly.
+- Render cost with the realism layer: ~2.5 s/frame at 1080×1920 on CPU. Render long videos in parallel chunks (`--from/--to`), then `ffmpeg -f concat` and mux the voiceover.

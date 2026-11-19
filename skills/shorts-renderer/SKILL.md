@@ -29,6 +29,12 @@ for ffmpeg + Playwright Chromium. Works on CPU (software WebGL): ~0.3–1 s per 
 7. **Final:** `node …/render.mjs <scene.js> out/<slug>.mp4 --audio voice.mp3 [--music bed.mp3 --music-db -22]` (1080x1920 @ 30 fps).
    Render in the background for long videos. Spot-check frames with ffmpeg afterwards.
 
+## Realistic look (default for new videos)
+Use `useHDRI` per set, `makePost` for the final image (contact shadows, bloom, depth of field, grain) and `makeHuman` from `/kit/human.js`
+for people. Example: `skills/script-writer/research/scripts/barry-marshall-h-pylori/render/scene.js` (87.7 s, 26 scenes, synced to an ElevenLabs voiceover).
+Word timings for any voiceover: force-align the script text with pocketsphinx (`pip install pocketsphinx`, offline; see that folder's
+`word-timings.json` and `line-timings.json`).
+
 ## Rules
 - Use stylised looks (simple characters, flat colours). The renderer can't do photoreal humans; say so if asked (see `references/kit-api.md` → Limits).
 - Label dramatizations in the description; never imitate a real channel's branding, characters or exact visuals when publishing.
