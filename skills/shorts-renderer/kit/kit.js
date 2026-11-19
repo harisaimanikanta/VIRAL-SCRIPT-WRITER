@@ -72,15 +72,23 @@ const capsule = (r, len, mat) => { const m = new THREE.Mesh(new THREE.CapsuleGeo
  * joints: pelvis, chest, neck, head, shoulderL/R, elbowL/R, hipL/R, kneeL/R. Rotate joints[x].rotation to pose.
  * style 'cartoon' = big round white head with dot eyes (reference-channel look); 'plain' = skin-toned head.
  */
-export function makeCharacter({ shirt = '#2f4d8f', pants = '#6f8fb8', skin = '#e8b796', hair = '#5a3b22', shoes = '#f2f2f2', style = 'cartoon' } = {}) {
+export function makeCharacter({ shirt = '#2f4d8f', pants = '#6f8fb8', skin = '#e8b796', hair = '#5a3b22', shoes = '#f2f2f2', style = 'cartoon',
+  hairStyle = 'none', glasses = false, coat = null, tie = null, moustache = false } = {}) {
   const M = c => new THREE.MeshStandardMaterial({ color: c, roughness: 0.7, transparent: true });
-  const mats = { shirt: M(shirt), pants: M(pants), skin: M(skin), hair: M(hair), shoes: M(shoes), head: M(style === 'cartoon' ? '#fbfbf8' : skin), eye: M('#111111') };
+  const mats = { shirt: M(shirt), pants: M(pants), skin: M(skin), hair: M(hair), shoes: M(shoes), head: M(style === 'cartoon' ? '#fbfbf8' : skin), eye: M('#111111'),
+    coat: M(coat || '#ffffff'), tie: M(tie || '#aa2222'), glass: M('#222222') };
   const root = new THREE.Group(), J = {};
   const joint = (name, parent, x, y, z = 0) => { const g = new THREE.Group(); g.position.set(x, y, z); parent.add(g); J[name] = g; return g; };
   const pelvis = joint('pelvis', root, 0, 0.98);
   const hipsMesh = capsule(0.17, 0.08, mats.pants); hipsMesh.rotation.z = Math.PI / 2; hipsMesh.scale.set(1, 1, 0.75); pelvis.add(hipsMesh);
   const chest = joint('chest', pelvis, 0, 0.08);
   const torso = capsule(0.19, 0.32, mats.shirt); torso.position.y = 0.26; torso.scale.set(1, 1, 0.7); chest.add(torso);
+  if (coat) {                                       // open lab coat: tapered shell from shoulders to mid-thigh + lapels
+    const shell = new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.25, 0.85, 24, 1, true, Math.PI * 0.62, Math.PI * 1.76), mats.coat);
+    shell.material.side = THREE.DoubleSide; shell.position.y = 0.12; shell.scale.z = 0.78; shell.castShadow = true; chest.add(shell);
+    for (const s of [-1, 1]) { const lap = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.32, 0.02), mats.coat); lap.position.set(s * 0.07, 0.4, 0.14); lap.rotation.z = s * 0.25; chest.add(lap); }
+  }
+  if (tie) { const tieM = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.3, 0.02), mats.tie); tieM.position.set(0, 0.36, 0.135); chest.add(tieM); }
   const neck = joint('neck', chest, 0, 0.56);
   const neckMesh = capsule(0.055, 0.06, mats.skin); neckMesh.position.y = 0.03; neck.add(neckMesh);
   const head = joint('head', neck, 0, 0.1);
@@ -92,6 +100,24 @@ export function makeCharacter({ shirt = '#2f4d8f', pants = '#6f8fb8', skin = '#e
   }
   const mouth = new THREE.Mesh(new THREE.TorusGeometry(hr * 0.22, hr * 0.035, 6, 16, Math.PI), mats.eye);
   mouth.position.set(0, hr * 0.62, hr * 0.95); mouth.rotation.z = Math.PI; head.add(mouth);
+  // expression mouths: 'smile' (default), 'frown', 'o' (shock), 'flat'
+  const frown = mouth.clone(); frown.rotation.z = 0; frown.position.y = hr * 0.5; frown.visible = false; head.add(frown);
+  const oMouth = new THREE.Mesh(new THREE.TorusGeometry(hr * 0.1, hr * 0.035, 8, 20), mats.eye); oMouth.position.set(0, hr * 0.55, hr * 0.97); oMouth.visible = false; head.add(oMouth);
+  const flat = new THREE.Mesh(new THREE.CapsuleGeometry(hr * 0.03, hr * 0.3, 4, 8), mats.eye); flat.rotation.z = Math.PI / 2; flat.position.set(0, hr * 0.58, hr * 0.97); flat.visible = false; head.add(flat);
+  const mouths = { smile: mouth, frown, o: oMouth, flat };
+  if (hairStyle !== 'none') {                       // a cartoon hair cap (tuft = young, side = parted, bald = ring)
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(hr * 1.03, 32, 16, 0, Math.PI * 2, 0, hairStyle === 'bald' ? Math.PI * 0.25 : Math.PI * 0.42), mats.hair);
+    cap.position.y = hr * 0.9; cap.rotation.x = -0.35; head.add(cap);
+    if (hairStyle === 'bald') cap.visible = false;
+    if (hairStyle === 'tuft') { const t = new THREE.Mesh(new THREE.ConeGeometry(hr * 0.35, hr * 0.5, 12), mats.hair); t.position.set(0.02, hr * 1.95, hr * 0.25); t.rotation.set(0.6, 0, -0.3); head.add(t); }
+    if (hairStyle === 'bald' || hairStyle === 'side') { const ring = new THREE.Mesh(new THREE.TorusGeometry(hr * 0.92, hr * 0.12, 8, 32, Math.PI * 1.4), mats.hair);
+      ring.position.y = hr * 1.05; ring.rotation.set(Math.PI / 2, 0, Math.PI * 0.8); head.add(ring); }
+  }
+  if (glasses) for (const s of [-1, 1]) {
+    const lens = new THREE.Mesh(new THREE.TorusGeometry(hr * 0.2, hr * 0.03, 8, 24), mats.glass); lens.position.set(s * hr * 0.35, hr * 1.0, hr * 0.97); head.add(lens);
+    const bridge = new THREE.Mesh(new THREE.BoxGeometry(hr * 0.3, hr * 0.03, hr * 0.03), mats.glass); bridge.position.set(0, hr * 1.02, hr * 0.98); head.add(bridge);
+  }
+  if (moustache) { const m = new THREE.Mesh(new THREE.CapsuleGeometry(hr * 0.06, hr * 0.35, 4, 8), mats.hair); m.rotation.z = Math.PI / 2; m.position.set(0, hr * 0.7, hr * 1.0); head.add(m); }
   for (const [s, n] of [[1, 'L'], [-1, 'R']]) {
     const sh = joint('shoulder' + n, chest, s * 0.24, 0.48);
     const ua = capsule(0.062, 0.24, mats.shirt); ua.position.y = -0.15; sh.add(ua);
@@ -105,9 +131,12 @@ export function makeCharacter({ shirt = '#2f4d8f', pants = '#6f8fb8', skin = '#e
     const sn = capsule(0.07, 0.32, mats.pants); sn.position.y = -0.22; kn.add(sn);
     const foot = new THREE.Mesh(new THREE.BoxGeometry(0.11, 0.08, 0.24), mats.shoes); foot.position.set(0, -0.48, 0.05); foot.castShadow = true; kn.add(foot);
   }
+  if (coat) for (const n of ['L', 'R']) J['shoulder' + n].children[0].material = mats.coat;   // coat sleeves
   const all = Object.values(mats).filter(m => m !== mats.eye);
   return {
     group: root, joints: J, mats,
+    /** 'smile' | 'frown' | 'o' | 'flat' */
+    face(expr) { for (const [k, m] of Object.entries(mouths)) m.visible = k === expr; },
     /** gentle breathing + sway; call every frame before custom poses */
     idle(t, amt = 1) {
       J.chest.rotation.x = 0.02 * Math.sin(t * 1.7) * amt; J.chest.position.y = 0.08 + 0.004 * Math.sin(t * 1.7) * amt;
